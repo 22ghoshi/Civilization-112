@@ -3,7 +3,8 @@ import math, copy, random
 from cmu_112_graphics import *
 
 class Map(object):
-    def __init__(self, dimensions, buildings, units):
+    def __init__(self, owner, dimensions, buildings, units):
+        self.owner = owner
         self.dimensions = dimensions
         self.buildings = buildings
         self.units = units
@@ -20,6 +21,8 @@ class Map(object):
             self.map[building.loc[0]][building.loc[1]] = building
         for unit in self.units:
             self.map[unit.loc[0]][unit.loc[1]] = unit
+        self.getVisibleTiles()
+        self.getMovableTiles()
     
     def getVisibleTiles(self):
         self.visibleTiles = []
@@ -28,21 +31,47 @@ class Map(object):
             for col in range(self.dimensions[1]):
                 r.append(False)
             self.visibleTiles.append(r)
+        self.claimedTiles = []
+        for row in range(self.dimensions[0]):
+            r = []
+            for col in range(self.dimensions[1]):
+                r.append(False)
+            self.claimedTiles.append(r)
+        for unit in self.units:
+            for (row, col) in unit.getVisibleTiles(self.dimensions):
+                self.visibleTiles[row][col] = True
+        for building in self.buildings:
+            for (row, col) in building.getVisibleTiles(self.dimensions):
+                self.visibleTiles[row][col] = True
+                self.claimedTiles[row][col] = True
+
+    def getMovableTiles(self):
+        self.movableTiles = []
+        for row in range(self.dimensions[0]):
+            r = []
+            for col in range(self.dimensions[1]):
+                r.append(False)
+            self.movableTiles.append(r)
+        if self.owner.selectedUnit != None and self.owner.movingSelectedUnit:
+            for (row, col) in self.owner.selectedUnit.getMovableTiles(self.dimensions):
+                self.movableTiles[row][col] = True
         
     def drawMap(self, app, canvas):
+        self.updateMap()
         for row in range(self.dimensions[0]):
             for col in range(self.dimensions[1]):
                 color = 'gray'
                 outline = 'black'
+                width = 1
                 x0, y0, x1, y1 = getCellBounds(app, row, col)
-                for unit in self.units:
-                    if (row, col) in unit.getVisibleTiles():
-                        color = 'white'
-                for building in self.buildings:
-                    if (row, col) in building.getVisibleTiles():
-                        color = 'white'
-                        outline = 'green'
-                canvas.create_rectangle(x0, y0, x1, y1, fill = color, outline = outline)
+                if self.visibleTiles[row][col]:
+                    color = 'white'
+                if self.claimedTiles[row][col]:
+                    outline = 'green'
+                if self.movableTiles[row][col]:
+                    outline = 'blue'
+                    width = 5
+                canvas.create_rectangle(x0, y0, x1, y1, fill = color, outline = outline, width = width)
                 if self.map[row][col] != None:
                     self.map[row][col].draw(app, canvas)
 
@@ -52,34 +81,63 @@ class Player(object):
     def __init__(self, dimensions):
         self.buildings = []
         self.units = [Settler(self, [random.randrange(0, dimensions[0]), random.randrange(0, dimensions[1])])]
-        self.map = Map(dimensions, self.buildings, self.units)
+        self.selectedUnit = None
+        self.movingSelectedUnit = False
+        self.map = Map(self, dimensions, self.buildings, self.units)
+    
+    def drawInstructions(self, app, canvas):
+        if self.selectedUnit != None:
+            self.selectedUnit.drawInstructions(app, canvas)
+        
         
 class Unit(object):
-    def __init__(self, owner, loc):
+    def __init__(self, owner, loc, moveRange, visRange):
         self.owner = owner
         self.loc = loc
-        self.visRange = 3
+        self.moveRange = moveRange
+        self.visRange = visRange
 
 class Settler(Unit):
     def __init__(self, owner, loc):
-        super().__init__(owner, loc)
+        super().__init__(owner, loc, 3, 4)
     
     def draw(self, app, canvas):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
         canvas.create_oval(x0, y0, x1, y1, fill = 'green')
     
-    def getVisibleTiles(self):
-        visibleTiles = []
+    def getVisibleTiles(self, dimensions):
+        allTiles = []
         for h in range(-self.visRange, self.visRange + 1):
             for v in range(-self.visRange, self.visRange + 1):
                 if abs(h) + abs(v) <= self.visRange:
-                    visibleTiles.append((self.loc[0] + h, self.loc[1] + v))
+                    allTiles.append((self.loc[0] + h, self.loc[1] + v))
+        visibleTiles = []
+        for tile in allTiles:
+            if not (tile[0] < 0 or tile[1] < 0 or tile[0] >= dimensions[0] or tile[1] >= dimensions[1]):
+                visibleTiles.append(tile)
         return visibleTiles
+    
+    def getMovableTiles(self, dimensions):
+        allTiles = []
+        for h in range(-self.moveRange, self.moveRange + 1):
+            for v in range(-self.moveRange, self.moveRange + 1):
+                if abs(h) + abs(v) <= self.moveRange:
+                    allTiles.append([self.loc[0] + h, self.loc[1] + v])
+        movableTiles = []
+        for tile in allTiles:
+            if not (tile[0] < 0 or tile[1] < 0 or tile[0] >= dimensions[0] or tile[1] >= dimensions[1]):
+                movableTiles.append(tile)
+        return movableTiles
     
     def settle(self):
         self.owner.buildings.append(City(self.owner, self.loc))
         self.owner.units.remove(self)
-        self.owner.map.updateMap()
+    
+    def drawInstructions(self, app, canvas):
+        if self.owner.movingSelectedUnit:
+            canvas.create_text(app.width / 2, 20, text = 'click a blue tile to move')
+        else:
+            canvas.create_text(app.width / 2, 20, text = 'press m to move, s to settle')
 
 class City(object):
     def __init__(self, owner, loc):
@@ -92,19 +150,23 @@ class City(object):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
         canvas.create_polygon(x0, y1, x0 + (0.5  * app.cellWidth), y0, x1, y1, fill = 'blue')
     
-    def getVisibleTiles(self):
-        visibleTiles = []
+    def getVisibleTiles(self, dimensions):
+        allTiles = []
         for h in range(-self.visRange, self.visRange + 1):
             for v in range(-self.visRange, self.visRange + 1):
                 if abs(h) + abs(v) <= self.visRange:
-                    visibleTiles.append((self.loc[0] + h, self.loc[1] + v))
+                    allTiles.append((self.loc[0] + h, self.loc[1] + v))
+        visibleTiles = []
+        for tile in allTiles:
+            if not (tile[0] < 0 or tile[1] < 0 or tile[0] >= dimensions[0] or tile[1] >= dimensions[1]):
+                visibleTiles.append(tile)
         return visibleTiles
 
 def appStarted(app):
-    app.rows = 15
-    app.cols = 15
-    app.cellWidth = 50
-    app.cellHeight = 50
+    app.rows = 30
+    app.cols = 30
+    app.cellWidth = 30
+    app.cellHeight = 30
     app.margin = [(app.width - (app.rows * app.cellWidth)) / 2, (app.height - (app.cols * app.cellHeight)) / 2]
     app.mouseLoc = None
     app.player = Player([app.rows, app.cols])
@@ -118,10 +180,38 @@ def mouseMoved(app, event):
     app.mouseLoc = [event.x, event.y]
 
 def mousePressed(app, event):
-    if len(app.player.units) > 0: app.player.units[0].settle()
+    selected = False
+    for unit in app.player.units:
+        if unit.loc == getCellClicked(app, event.x, event.y):
+            app.player.selectedUnit = unit
+            selected = True
+    if app.player.movingSelectedUnit:
+        if (getCellClicked(app, event.x, event.y) in app.player.selectedUnit.getMovableTiles(app.player.map.dimensions)):
+            app.player.selectedUnit.loc = getCellClicked(app, event.x, event.y)
+            app.player.movingSelectedUnit = False
+    
+
+def keyPressed(app, event):
+    if event.key == 'm':
+        if app.player.selectedUnit != None:
+            app.player.movingSelectedUnit = not app.player.movingSelectedUnit
+    if event.key == 's':
+        if isinstance(app.player.selectedUnit, Settler):
+            app.player.selectedUnit.settle()
+            app.player.selectedUnit = None
+    if event.key == 'n':
+        app.player.units.append(Settler(app.player, [random.randrange(0, app.player.map.dimensions[0]), random.randrange(0, app.player.map.dimensions[1])]))
+            
+def getCellClicked(app, x, y):
+    if x < app.margin[0] or x > (app.width - app.margin[0]) or y < app.margin[1] or y > (app.height - app.margin[1]):
+        return None
+    row = (y - app.margin[1]) // app.cellHeight
+    col = (x - app.margin[0]) // app.cellWidth
+    return [int(row), int(col)]
 
 def redrawAll(app, canvas):
     app.player.map.drawMap(app, canvas)
+    app.player.drawInstructions(app, canvas)
 
 def getCellBounds(app, row, col):
     x0 = app.margin[0] + (col * app.cellWidth)
@@ -132,7 +222,7 @@ def getCellBounds(app, row, col):
 
 
 def main():
-    runApp(width = 800, height = 800)
+    runApp(width = 1000, height = 1000)
 
 if __name__ == '__main__':
     main()
