@@ -68,6 +68,9 @@ class Map(object):
                     color = 'white'
                 if self.claimedTiles[row][col]:
                     outline = 'green'
+                    width = 3
+                if self.owner.selectedUnit != None and [row, col] == self.owner.selectedUnit.loc:
+                    color = 'yellow'
                 if self.movableTiles[row][col]:
                     outline = 'blue'
                     width = 5
@@ -88,6 +91,8 @@ class Player(object):
     def drawInstructions(self, app, canvas):
         if self.selectedUnit != None:
             self.selectedUnit.drawInstructions(app, canvas)
+        else:
+            canvas.create_text(app.width / 2, 20, text = 'click on a unit to select it. press n for a new settler')
         
         
 class Unit(object):
@@ -125,7 +130,7 @@ class Settler(Unit):
                     allTiles.append([self.loc[0] + h, self.loc[1] + v])
         movableTiles = []
         for tile in allTiles:
-            if not (tile[0] < 0 or tile[1] < 0 or tile[0] >= dimensions[0] or tile[1] >= dimensions[1]):
+            if not (tile[0] < 0 or tile[1] < 0 or tile[0] >= dimensions[0] or tile[1] >= dimensions[1] or self.owner.map.map[tile[0]][tile[1]] != None):
                 movableTiles.append(tile)
         return movableTiles
     
@@ -185,6 +190,8 @@ def mousePressed(app, event):
         if unit.loc == getCellClicked(app, event.x, event.y):
             app.player.selectedUnit = unit
             selected = True
+    if not selected and not app.player.movingSelectedUnit:
+        app.player.selectedUnit = None
     if app.player.movingSelectedUnit:
         if (getCellClicked(app, event.x, event.y) in app.player.selectedUnit.getMovableTiles(app.player.map.dimensions)):
             app.player.selectedUnit.loc = getCellClicked(app, event.x, event.y)
