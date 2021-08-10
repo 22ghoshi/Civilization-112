@@ -2,7 +2,114 @@ import math, copy, random
 
 from cmu_112_graphics import *
 
-class Map(object):
+# CITATION: idea / pseudocode for map generation algorithm obtained from https://ijdykeman.github.io/ml/2017/10/12/wang-tile-procedural-generation.html
+class GlobalMap(object):
+    def __init__(self, dimensions):
+        self.dimensions = dimensions
+        self.terrainTypes = ['ocean', 'lake', 'sand', 'plain', 'forest', 'snow', 'mountain']
+        self.initTerrainMap(dimensions)
+        self.generateTerrain(dimensions)
+    
+    def initTerrainMap(self, dimensions):
+        terrainMapTypes = [False, 'ocean', 'lake', 'sand', 'plain', 'forest', 'snow', 'mountain']
+        self.terrainMap = []
+        for row in range(dimensions[0]):
+            r = []
+            for col in range(dimensions[1]):
+                r.append(copy.copy(terrainMapTypes))
+            self.terrainMap.append(r)
+        
+    def fullTerrain(self, dimensions):
+        for row in range(dimensions[0]):
+            for col in range(dimensions[1]):
+                if not self.terrainMap[row][col][0]:
+                    return False
+        return True
+
+    def generateTerrain(self, dimensions):
+        while not self.fullTerrain(dimensions): #not self.fullTerrain(dimensions)
+            row = random.randrange(0, dimensions[0])
+            col = random.randrange(0, dimensions[1])
+            if self.terrainMap[row][col][0]:
+                continue
+            else:
+                if len(self.terrainMap[row][col]) > 1:
+                    self.terrainMap[row][col] = [True, random.choice(self.terrainMap[row][col][1:])]
+                    self.adjustNearbyTiles(row, col, dimensions)
+                else:
+                    self.resetNearbyTiles(row, col, dimensions)
+    
+    def resetNearbyTiles(self, row, col, dimensions):
+        dirs = []
+        for h in range(-2, 3):
+            for v in range(-2, 3):
+                if abs(h) + abs(v) <= 2:
+                    dirs.append((h, v))
+        for dir in dirs:
+            arow = row + dir[0]
+            acol = col + dir[1]
+            if (0 <= arow < dimensions[0]) and (0 <= acol < dimensions[1]):
+                self.terrainMap[arow][acol] = [False, 'ocean', 'lake', 'sand', 'plain', 'forest', 'snow', 'mountain']
+        dirs = []
+        for h in range(-4, 5):
+            for v in range(-4, 5):
+                if 3 <= abs(h) + abs(v) <= 4:
+                    dirs.append((h, v))
+        for dir in dirs:
+            arow = row + dir[0]
+            acol = col + dir[1]
+            if (0 <= arow < dimensions[0]) and (0 <= acol < dimensions[1]) and (self.terrainMap[arow][acol][0]):
+                self.adjustNearbyTiles(arow, acol, dimensions)
+
+    
+    def adjustNearbyTiles(self, row, col, dimensions):
+        centerTileType = self.terrainMap[row][col][1]
+        dirs1 = []
+        for h in range(-1, 2):
+            for v in range(-1, 2):
+                if abs(h) + abs(v) <= 1:
+                    dirs1.append((h, v))
+        for dir in dirs1:
+            if dir == (0, 0):
+                continue
+            arow = row + dir[0]
+            acol = col + dir[1]
+            if (0 <= arow < dimensions[0]) and (0 <= acol < dimensions[1]) and (not self.terrainMap[arow][acol][0]):
+                for tileType in self.terrainMap[arow][acol][1:]:
+                    if tileType != centerTileType and tileType != self.terrainTypes[self.terrainTypes.index(centerTileType) - 1] and tileType != self.terrainTypes[(self.terrainTypes.index(centerTileType) + 1) % 7]:
+                        self.terrainMap[arow][acol].remove(tileType)
+        dirs2 = []
+        for h in range(-2, 3):
+            for v in range(-2, 3):
+                if abs(h) + abs(v) == 2:
+                    dirs2.append((h, v))
+        for dir in dirs2:
+            if (0 <= row + dir[0] < dimensions[0]) and (0 <= col + dir[1] < dimensions[1]):
+                arow = row + dir[0]
+                acol = col + dir[1]
+                for tileType in self.terrainMap[arow][acol][1:]:
+                    if tileType != centerTileType and tileType != self.terrainTypes[self.terrainTypes.index(centerTileType) - 1] and tileType != self.terrainTypes[self.terrainTypes.index(centerTileType) - 2] and tileType != self.terrainTypes[(self.terrainTypes.index(centerTileType) + 1) % 7] and tileType != self.terrainTypes[(self.terrainTypes.index(centerTileType) + 2) % 7]:
+                        self.terrainMap[arow][acol].remove(tileType)
+    
+    def getTerrainColor(self, app, row, col):
+        if self.terrainMap[row][col][1] == 'ocean':
+            color = 'blue4'
+        if self.terrainMap[row][col][1] == 'lake':
+            color = 'turquoise'
+        if self.terrainMap[row][col][1] == 'sand':
+            color = 'yellow'
+        if self.terrainMap[row][col][1] == 'plain':
+            color = 'SpringGreen2'
+        if self.terrainMap[row][col][1] == 'forest':
+            color = 'dark green'
+        if self.terrainMap[row][col][1] == 'snow':
+            color = 'white'
+        if self.terrainMap[row][col][1] == 'mountain':
+            color = 'brown4'
+        return color
+
+
+class PlayerMap(object):
     def __init__(self, owner, dimensions, buildings, units):
         self.owner = owner
         self.dimensions = dimensions
@@ -17,10 +124,12 @@ class Map(object):
             for col in range(self.dimensions[1]):
                 r.append(None)
             self.map.append(r)
-        for building in self.buildings:
-            self.map[building.loc[0]][building.loc[1]] = building
-        for unit in self.units:
-            self.map[unit.loc[0]][unit.loc[1]] = unit
+        for player in Player.players:
+            for building in player.buildings:
+                self.map[building.loc[0]][building.loc[1]] = building
+        for player in Player.players:
+            for unit in player.units:
+                self.map[unit.loc[0]][unit.loc[1]] = unit
         self.getVisibleTiles()
         self.getMovableTiles()
     
@@ -65,28 +174,32 @@ class Map(object):
                 width = 1
                 x0, y0, x1, y1 = getCellBounds(app, row, col)
                 if self.visibleTiles[row][col]:
-                    color = 'white'
+                    color = app.globalMap.getTerrainColor(app, row, col)
                 if self.claimedTiles[row][col]:
                     outline = 'green'
                     width = 3
                 if self.owner.selectedUnit != None and [row, col] == self.owner.selectedUnit.loc:
-                    color = 'yellow'
+                    outline = 'yellow'
+                    width = 3
                 if self.movableTiles[row][col]:
                     outline = 'blue'
                     width = 5
                 canvas.create_rectangle(x0, y0, x1, y1, fill = color, outline = outline, width = width)
-                if self.map[row][col] != None:
+                if self.map[row][col] != None and self.visibleTiles[row][col]:
                     self.map[row][col].draw(app, canvas)
 
 
 
 class Player(object):
+    players = []
+    
     def __init__(self, dimensions):
         self.buildings = []
         self.units = [Settler(self, [random.randrange(0, dimensions[0]), random.randrange(0, dimensions[1])])]
         self.selectedUnit = None
         self.movingSelectedUnit = False
-        self.map = Map(self, dimensions, self.buildings, self.units)
+        self.map = PlayerMap(self, dimensions, self.buildings, self.units)
+        Player.players.append(self)
     
     def drawInstructions(self, app, canvas):
         if self.selectedUnit != None:
@@ -109,6 +222,8 @@ class Settler(Unit):
     def draw(self, app, canvas):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
         canvas.create_oval(x0, y0, x1, y1, fill = 'green')
+        if app.currentPlayer != self.owner:
+            canvas.create_oval(x0, y0, x1, y1, fill = 'green', outline = 'red', width = 5)
     
     def getVisibleTiles(self, dimensions):
         allTiles = []
@@ -174,7 +289,9 @@ def appStarted(app):
     app.cellHeight = 30
     app.margin = [(app.width - (app.rows * app.cellWidth)) / 2, (app.height - (app.cols * app.cellHeight)) / 2]
     app.mouseLoc = None
-    app.player = Player([app.rows, app.cols])
+    app.players = [Player([app.rows, app.cols]), Player([app.rows, app.cols])]
+    app.currentPlayer = app.players[0]
+    app.globalMap = GlobalMap([app.rows, app.cols])
 
 def mouseDragged(app, event):
     app.margin[0] += event.x - app.mouseLoc[0]
@@ -186,28 +303,42 @@ def mouseMoved(app, event):
 
 def mousePressed(app, event):
     selected = False
-    for unit in app.player.units:
+    for unit in app.currentPlayer.units:
         if unit.loc == getCellClicked(app, event.x, event.y):
-            app.player.selectedUnit = unit
+            app.currentPlayer.selectedUnit = unit
             selected = True
-    if not selected and not app.player.movingSelectedUnit:
-        app.player.selectedUnit = None
-    if app.player.movingSelectedUnit:
-        if (getCellClicked(app, event.x, event.y) in app.player.selectedUnit.getMovableTiles(app.player.map.dimensions)):
-            app.player.selectedUnit.loc = getCellClicked(app, event.x, event.y)
-            app.player.movingSelectedUnit = False
+    if not selected and not app.currentPlayer.movingSelectedUnit:
+        app.currentPlayer.selectedUnit = None
+    if app.currentPlayer.movingSelectedUnit:
+        if (getCellClicked(app, event.x, event.y) in app.currentPlayer.selectedUnit.getMovableTiles(app.currentPlayer.map.dimensions)):
+            app.currentPlayer.selectedUnit.loc = getCellClicked(app, event.x, event.y)
+            app.currentPlayer.movingSelectedUnit = False
     
 
 def keyPressed(app, event):
+    if event.key == 'r':
+        appStarted(app)
+    if event.key == '=':
+        app.cellWidth += 5
+        app.cellHeight += 5
+        # app.margin = [(app.width - ((app.rows * app.cellWidth) + app.margin[0])) / 2, (app.height - ((app.cols * app.cellHeight) + app.margin[1])) / 2]
+    if event.key == '-':
+        app.cellWidth = max(app.cellWidth - 5, 10)
+        app.cellHeight = max(app.cellHeight - 5, 10)
+        # app.margin = [(app.width - ((app.rows * app.cellWidth) + app.margin[0])) / 2, (app.height - ((app.cols * app.cellHeight) + app.margin[1])) / 2]
+    if event.key == '0':
+        app.currentPlayer = app.players[0]
+    if event.key == '1':
+        app.currentPlayer = app.players[1]
     if event.key == 'm':
-        if app.player.selectedUnit != None:
-            app.player.movingSelectedUnit = not app.player.movingSelectedUnit
+        if app.currentPlayer.selectedUnit != None:
+            app.currentPlayer.movingSelectedUnit = not app.currentPlayer.movingSelectedUnit
     if event.key == 's':
-        if isinstance(app.player.selectedUnit, Settler):
-            app.player.selectedUnit.settle()
-            app.player.selectedUnit = None
+        if isinstance(app.currentPlayer.selectedUnit, Settler):
+            app.currentPlayer.selectedUnit.settle()
+            app.currentPlayer.selectedUnit = None
     if event.key == 'n':
-        app.player.units.append(Settler(app.player, [random.randrange(0, app.player.map.dimensions[0]), random.randrange(0, app.player.map.dimensions[1])]))
+        app.currentPlayer.units.append(Settler(app.currentPlayer, [random.randrange(0, app.currentPlayer.map.dimensions[0]), random.randrange(0, app.currentPlayer.map.dimensions[1])]))
             
 def getCellClicked(app, x, y):
     if x < app.margin[0] or x > (app.width - app.margin[0]) or y < app.margin[1] or y > (app.height - app.margin[1]):
@@ -217,8 +348,8 @@ def getCellClicked(app, x, y):
     return [int(row), int(col)]
 
 def redrawAll(app, canvas):
-    app.player.map.drawMap(app, canvas)
-    app.player.drawInstructions(app, canvas)
+    app.currentPlayer.map.drawMap(app, canvas)
+    app.currentPlayer.drawInstructions(app, canvas)
 
 def getCellBounds(app, row, col):
     x0 = app.margin[0] + (col * app.cellWidth)
