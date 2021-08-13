@@ -317,7 +317,8 @@ class Player(object):
         if self.allActionsTaken():
             canvas.create_text(app.width / 2, 80, text = 'all actions taken for this turn. press t to finish turn and switch to next player')
         else:
-            canvas.create_text(app.width / 2, 80, text = 'there are available actions remaining. click on a unit or building to select it. press t to end turn early')
+            canvas.create_text(app.width / 2, 67, text = 'there are available actions remaining. click on a unit or building to select it.')
+            canvas.create_text(app.width / 2, 80, text = 'press h for help, or press t to end turn early')
         if self.selectedUnit != None:
             canvas.create_text(app.width / 2, 20, text = f'selected unit: {self.selectedUnit}, hp = {self.selectedUnit.hp}, dmg = {self.selectedUnit.dmg}')
             self.selectedUnit.drawInstructions(app, canvas)
@@ -372,7 +373,7 @@ class Unit(object):
             self.actionTaken = True
     
     def checkHP(self):
-        if self.hp <= 0:
+        if self.hp <= 0 and self in self.owner.units:
             self.owner.units.remove(self)
             self.owner.selectedUnit = None
             return False
@@ -386,9 +387,12 @@ class Settler(Unit):
     
     def draw(self, app, canvas):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
-        canvas.create_oval(x0, y0, x1, y1, fill = 'green')
+        canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'green')
         if app.currentPlayer != self.owner:
-            canvas.create_oval(x0, y0, x1, y1, fill = 'green', outline = 'red', width = 5)
+            canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'green', outline = 'red', width = 3)
+        canvas.create_rectangle(x0 + 2, y1 - 9, x1 - 2, y1 - 2, fill = 'white')
+        canvas.create_image((x0 + x1) / 2, ((y1 - 10) + y0) / 2, image = ImageTk.PhotoImage(app.settlerImage))
+        canvas.create_rectangle(x0 + 2, y1 - 9, (x0 + 2) + ((self.hp / 100) * ((x1 - 2) - (x0 + 2))), y1 - 2, fill = 'green')
     
     def settle(self):
         self.owner.buildings.append(City(self.owner, self.loc))
@@ -397,7 +401,7 @@ class Settler(Unit):
 
     def drawInstructions(self, app, canvas):
         if self.owner.movingSelectedUnit:
-            canvas.create_text(app.width / 2, 40, text = 'click a blue tile to move')
+            canvas.create_text(app.width / 2, 40, text = 'click a blue tile to move or press m again to cancel')
         else:
             if self.actionTaken:
                canvas.create_text(app.width / 2, 40, text = 'this settler has moved already this turn') 
@@ -414,9 +418,12 @@ class Warrior(Unit):
     
     def draw(self, app, canvas):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
-        canvas.create_oval(x0, y0, x1, y1, fill = 'gray')
+        canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'gray')
         if app.currentPlayer != self.owner:
-            canvas.create_oval(x0, y0, x1, y1, fill = 'gray', outline = 'red', width = 5)
+            canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'gray', outline = 'red', width = 3)
+        canvas.create_image((x0 + x1) / 2, ((y1 - 10) + y0) / 2, image = ImageTk.PhotoImage(app.warriorImage))
+        canvas.create_rectangle(x0 + 2, y1 - 9, x1 - 2, y1 - 2, fill = 'white')
+        canvas.create_rectangle(x0 + 2, y1 - 9, (x0 + 2) + ((self.hp / 200) * ((x1 - 2) - (x0 + 2))), y1 - 2, fill = 'green')
     
     def attack(self, app, x, y):
         if (getCellClicked(app, x, y) in self.getAttackableTiles(self.owner.map.dimensions)):
@@ -443,9 +450,9 @@ class Warrior(Unit):
         
     def drawInstructions(self, app, canvas):
         if self.owner.movingSelectedUnit:
-            canvas.create_text(app.width / 2, 40, text = 'click a blue tile to move')
+            canvas.create_text(app.width / 2, 40, text = 'click a blue tile to move or press m again to cancel')
         elif self.owner.selectedUnitAttacking:
-            canvas.create_text(app.width / 2, 40, text = 'click a red tile with an enemy unit or building to attack')
+            canvas.create_text(app.width / 2, 40, text = 'click a red tile with an enemy unit or building to attack, or press a again to cancel')
         else:
             if self.actionTaken:
                canvas.create_text(app.width / 2, 40, text = 'this warrior has acted already this turn') 
@@ -462,9 +469,13 @@ class Archer(Unit):
     
     def draw(self, app, canvas):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
-        canvas.create_oval(x0, y0, x1, y1, fill = 'brown')
+        canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'gray')
         if app.currentPlayer != self.owner:
-            canvas.create_oval(x0, y0, x1, y1, fill = 'brown', outline = 'red', width = 5)
+            canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'gray', outline = 'red', width = 3)
+
+        canvas.create_rectangle(x0 + 2, y1 - 9, x1 - 2, y1 - 2, fill = 'white')
+        canvas.create_image((x0 + x1) / 2, ((y1 - 10) + y0) / 2, image = ImageTk.PhotoImage(app.archerImage))
+        canvas.create_rectangle(x0 + 2, y1 - 9, (x0 + 2) + ((self.hp / 75) * ((x1 - 2) - (x0 + 2))), y1 - 2, fill = 'green')
     
     def attack(self, app, x, y):
         if (getCellClicked(app, x, y) in self.getAttackableTiles(self.owner.map.dimensions)):
@@ -490,9 +501,9 @@ class Archer(Unit):
     
     def drawInstructions(self, app, canvas):
         if self.owner.movingSelectedUnit:
-            canvas.create_text(app.width / 2, 40, text = 'click a blue tile to move')
+            canvas.create_text(app.width / 2, 40, text = 'click a blue tile to move or press m again to cancel')
         elif self.owner.selectedUnitAttacking:
-            canvas.create_text(app.width / 2, 40, text = 'click a red tile with an enemy unit or building to attack')
+            canvas.create_text(app.width / 2, 40, text = 'click a red tile with an enemy unit or building to attack, or press a again to cancel')
         else:
             if self.actionTaken:
                canvas.create_text(app.width / 2, 40, text = 'this archer has acted already this turn') 
@@ -516,9 +527,12 @@ class City(object):
 
     def draw(self, app, canvas):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
-        canvas.create_polygon(x0, y1, x0 + (0.5  * app.cellWidth), y0, x1, y1, fill = 'blue')
+        canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'blue')
         if app.currentPlayer != self.owner:
-            canvas.create_polygon(x0, y1, x0 + (0.5  * app.cellWidth), y0, x1, y1, fill = 'blue', outline = 'red', width = 5)
+            canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'blue', outline = 'red', width = 3)
+        canvas.create_rectangle(x0 + 2, y1 - 9, x1 - 2, y1 - 2, fill = 'white')
+        canvas.create_image((x0 + x1) / 2, ((y1 - 10) + y0) / 2, image = ImageTk.PhotoImage(app.cityImage))
+        canvas.create_rectangle(x0 + 2, y1 - 9, (x0 + 2) + ((self.hp / 500) * ((x1 - 2) - (x0 + 2))), y1 - 2, fill = 'green')
     
     def checkProduction(self):
         self.justFinished = False
@@ -539,7 +553,7 @@ class City(object):
         return val
     
     def checkHP(self):
-        if self.hp <= 0:
+        if self.hp <= 0 and self in self.owner.units:
             self.owner.buildings.remove(self)
             return False
 
@@ -667,29 +681,29 @@ class Barbarian(object):
             return
         path = self.calcPath(dimensions, self.chooseTarget())
         movable = self.getMovableTiles(dimensions, map)
-        print(path)
-        print(movable)
         for loc in path:
             if [loc[0], loc[1]] in movable:
-                print(True)
                 self.move(loc[0], loc[1])
                 return
     
     def checkHP(self):
-        if self.hp <= 0:
+        if self.hp <= 0 and self in Barbarian.barbarians:
             Barbarian.barbarians.remove(self)
             return True
         return False
     
     def draw(self, app, canvas):
         x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
-        canvas.create_oval(x0, y0, x1, y1, fill = 'red')
+        canvas.create_oval(x0 + 5, y0, x1 - 5, y1 - 10, fill = 'red')
+        canvas.create_rectangle(x0 + 2, y1 - 9, x1 - 2, y1 - 2, fill = 'white')
+        canvas.create_rectangle(x0 + 2, y1 - 9, (x0 + 2) + ((self.hp / 200) * ((x1 - 2) - (x0 + 2))), y1 - 2, fill = 'green')
+        
 
 def appStarted(app):
     app.rows = 30
     app.cols = 30
-    app.cellWidth = 30
-    app.cellHeight = 30
+    app.cellWidth = 35
+    app.cellHeight = 35
     app.margin = [(app.width - (app.rows * app.cellWidth)) / 2, (app.height - (app.cols * app.cellHeight))]
     app.mouseLoc = None
     app.players = [Player(app, [app.rows, app.cols]), Player(app, [app.rows, app.cols])]
@@ -697,6 +711,16 @@ def appStarted(app):
     app.globalMap = GlobalMap([app.rows, app.cols])
     app.turnCounter = 1
     app.gameOver = False
+    app.helping = False
+    app.scale = 15
+    #CITATION: settlerImage taken from https://www.civilopedia.net/rise-and-fall/units/unit_settler
+    app.settlerImage = app.scaleImage(app.loadImage('settlericon.webp'), 1/app.scale)
+    #CITATION: warriorImage taken from https://civilization.fandom.com/wiki/Warrior_(Civ6)
+    app.warriorImage = app.scaleImage(app.loadImage('warrioricon.png'), 1/app.scale)
+    #CITATION: archerImage taken from https://civilization.fandom.com/wiki/Archer_(Civ6)
+    app.archerImage = app.scaleImage(app.loadImage('archericon.png'), 1/app.scale)
+    #CITATION: cityImage taken from https://civ6.fandom.com/wiki/City_Center
+    app.cityImage = app.scaleImage(app.loadImage('cityicon.png'), 1/app.scale)
 
 #CITATION: taken from past hw
 def roundHalfUp(d):
@@ -741,14 +765,30 @@ def mousePressed(app, event):
 def keyPressed(app, event):
     if app.gameOver:
         return
+    if app.helping:
+        if event.key in ['h', 'Escape']:
+            app.helping = False
+        return
+    if event.key == 'h':
+        app.helping = True
     if event.key == 'r':
         appStarted(app)
     if event.key == '=':
         app.cellWidth += 5
         app.cellHeight += 5
+        app.scale -= 1.2
+        app.settlerImage = app.scaleImage(app.loadImage('settlericon.webp'), 1/app.scale)
+        app.warriorImage = app.scaleImage(app.loadImage('warrioricon.png'), 1/app.scale)
+        app.archerImage = app.scaleImage(app.loadImage('archericon.png'), 1/app.scale)
+        app.cityImage = app.scaleImage(app.loadImage('cityicon.png'), 1/app.scale)
     if event.key == '-':
         app.cellWidth = max(app.cellWidth - 5, 10)
         app.cellHeight = max(app.cellHeight - 5, 10)
+        app.scale += 1.2
+        app.settlerImage = app.scaleImage(app.loadImage('settlericon.webp'), 1/app.scale)
+        app.warriorImage = app.scaleImage(app.loadImage('warrioricon.png'), 1/app.scale)
+        app.archerImage = app.scaleImage(app.loadImage('archericon.png'), 1/app.scale)
+        app.cityImage = app.scaleImage(app.loadImage('cityicon.png'), 1/app.scale)
     if event.key == '1':
         if isinstance(app.currentPlayer.selectedBuilding, City) and app.currentPlayer.selectedBuilding.producingUnit == None:
             app.currentPlayer.selectedBuilding.producingUnit = Warrior(app.currentPlayer, [app.currentPlayer.selectedBuilding.loc[0], app.currentPlayer.selectedBuilding.loc[1] + 1])
@@ -801,10 +841,14 @@ def getCellClicked(app, x, y):
     return [int(row), int(col)]
 
 def redrawAll(app, canvas):
+    if app.helping:
+        drawHelp(app, canvas)
+        return
     app.currentPlayer.map.drawMap(app, canvas)
     canvas.create_rectangle(0, 0, app.width, 90, fill = 'white')
     if app.gameOver:
         canvas.create_text(app.width / 2, 40, text = f'game over! player {app.players.index(app.currentPlayer) + 1} wins!')
+        canvas.create_text(app.width / 2, 60, text = f'press r to start a new game')
     else:
         drawTurnAndPlayer(app, canvas)
         app.currentPlayer.drawInstructions(app, canvas)
@@ -813,6 +857,60 @@ def redrawAll(app, canvas):
 def drawTurnAndPlayer(app, canvas):
     canvas.create_text(80, 30, text = f'turn: {app.turnCounter}')
     canvas.create_text(80, 50, text = f'player: {app.players.index(app.currentPlayer) + 1}')
+
+def drawHelp(app, canvas): 
+    helpText = '''
+    Resources
+
+    Food, gold and production are the resources gained by players from citizens working the tiles surrounding each city.
+    Each tile yields a certain amount of each resource when worked.
+    The more citizens you have, the more of each tile's total yield you gain per turn.
+    Food:
+    Each citizen requires 10 food per turn. To get a new citizen, you must have 2**(totalCitizens) surplus food.
+    Production:
+    Every unit requires a certain amount of production to make. Once you reach or exceed that amount of production,
+    the unit is produced.
+
+    Units
+
+    Settler (Flag in Green Circle):
+    Settlers require 150 production to produce in a city.
+    Settlers have 100 health and deal no damage. They can see 4 tiles away and move 2 tiles each turn.
+    Settling a settler (pressing s while it is selected) consumes the settler to create a city.
+    Warrior (Club in Gray Circle):
+    Warriors require 100 production to produce in a city.
+    Warriors have 200 health and deal 30 damage. They can see 3 tiles away and move 3 tiles each turn.
+    Warriors can only attack enemy units that are 1 tile away, and attacking also hurts the warrior itself.
+    Archer (Bow in Gray Circle):
+    Archers require 75 production to produce in a city.
+    Archers have 75 health and deal 60 damage. They can see 4 tiles away and move 2 tiles each turn.
+    Archers can attack enemy units 3 tiles away, and take no damage when they attack.
+    Barbarians (Red Circle):
+    Barbarians spawn every ten turns. They will target the player with the most resources, units and/or buildings.
+    Their target is the closest unit or building owned by that player.
+    They have 200 health, deal 40 damage, and move towards their target 4 tiles at a time. If it encounters units
+    or reaches its target, it will attack.
+    All enemy units are outlined in red.
+
+    Cities
+
+    Cities, after being created by a settler, claim the surrounding tiles for the player in a radius of 5 tiles,
+    and give vision of these tiles as long as the city stands. 
+    Claimed tiles are now available for the citizens of the city to work, in order for the player to gain resources.
+    Cities are used to produce the units above.
+
+    
+    One player wins when the other player has no more units or cities remaining.
+
+
+    press Escape or h to return to the game
+    '''
+    height = 20
+    for line in helpText.splitlines():
+        canvas.create_text(app.width / 2, height, text = line.strip(), font = 'Arial 14')
+        height += 20
+    canvas.create_image(app.width / 2, app.height / 2, image = ImageTk.PhotoImage(app.settlerImage))
+
 
 def getCellBounds(app, row, col):
     x0 = app.margin[0] + (col * app.cellWidth)
