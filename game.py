@@ -134,14 +134,14 @@ class GlobalMap(object):
 
 
 class PlayerMap(object):
-    def __init__(self, owner, dimensions, buildings, units):
+    def __init__(self, app, owner, dimensions, buildings, units):
         self.owner = owner
         self.dimensions = dimensions
         self.buildings = buildings
         self.units = units
-        self.updateMap()
+        self.updateMap(app)
     
-    def updateMap(self):
+    def updateMap(self, app):
         self.map = []
         for row in range(self.dimensions[0]):
             r = []
@@ -157,6 +157,7 @@ class PlayerMap(object):
         self.getVisibleTiles()
         self.getMovableTiles()
         self.getAttackableTiles()
+        self.findBarbarians(app)
     
     def getVisibleTiles(self):
         self.visibleTiles = []
@@ -200,9 +201,13 @@ class PlayerMap(object):
         if self.owner.selectedUnit != None and self.owner.selectedUnitAttacking:
             for (row, col) in self.owner.selectedUnit.getAttackableTiles(self.dimensions):
                 self.attackableTiles[row][col] = True
+    
+    def findBarbarians(self, app):
+        for barb in Barbarian.barbarians:
+            self.map[barb.loc[0]][barb.loc[1]] = barb
         
     def drawMap(self, app, canvas):
-        self.updateMap()
+        self.updateMap(app)
         for row in range(self.dimensions[0]):
             for col in range(self.dimensions[1]):
                 color = 'gray'
@@ -224,6 +229,8 @@ class PlayerMap(object):
                     outline = 'red'
                     width = 5
                 canvas.create_rectangle(x0, y0, x1, y1, fill = color, outline = outline, width = width)
+                if isinstance(self.map[row][col], Barbarian):
+                    self.map[row][col].draw(app, canvas)
                 if self.map[row][col] != None and self.visibleTiles[row][col]:
                     self.map[row][col].draw(app, canvas)
 
@@ -232,7 +239,7 @@ class PlayerMap(object):
 class Player(object):
     players = []
     
-    def __init__(self, dimensions):
+    def __init__(self, app, dimensions):
         self.buildings = []
         self.units = [Settler(self, [random.randrange(0, dimensions[0]), random.randrange(0, dimensions[1])])]
         wardir = 1
@@ -243,7 +250,7 @@ class Player(object):
         self.movingSelectedUnit = False
         self.selectedUnitAttacking = False
         self.selectedBuilding = None
-        self.map = PlayerMap(self, dimensions, self.buildings, self.units)
+        self.map = PlayerMap(app, self, dimensions, self.buildings, self.units)
         self.food = 0
         self.gold = 0
         self.prod = 0
@@ -286,7 +293,7 @@ class Player(object):
         self.food = max(0, self.food - 10 * self.totalCitizens)
         while self.food >= 2 ** self.totalCitizens:
             self.food -= 2 ** self.totalCitizens
-            random.choice(self.buildings).citizens += 1
+            if len(self.buildings) > 0: random.choice(self.buildings).citizens += 1
             self.totalCitizens += 1
         
     def nextTurn(self, app):
@@ -303,10 +310,8 @@ class Player(object):
                 unit.hp = min(200, unit.hp + 10)
             if isinstance(unit, Settler) and unit.hp < 100:
                 unit.hp = min(200, unit.hp + 15)
-        # for building in self.buildings:
-        #     building.actionTaken = False
-        #     if building.hp < 500:
-        #         building.hp = min(500, building.hp + 25)
+        for building in self.buildings:
+            building.actionTaken = False
         
     def drawInstructions(self, app, canvas):
         if self.allActionsTaken():
@@ -421,8 +426,6 @@ class Warrior(Unit):
                 self.hp -= int(0.2 * self.owner.map.map[attackloc[0]][attackloc[1]].dmg)
                 self.checkHP()
                 self.owner.map.map[attackloc[0]][attackloc[1]].checkHP()
-                if not self.owner.map.map[attackloc[0]][attackloc[1]].checkHP() and isinstance(self.owner.map.map[attackloc[0]][attackloc[1]], City):
-                    self.owner.buildings.append(self.owner.map.map[attackloc[0]][attackloc[1]])
                 self.owner.selectedUnitAttacking = False
                 self.actionTaken = True
 
@@ -430,7 +433,7 @@ class Warrior(Unit):
         allTiles = []
         for h in range(-self.attackRange, self.attackRange + 1):
             for v in range(-self.attackRange, self.attackRange + 1):
-                if abs(h) + abs(v) <= self.attackRange:
+                if (h, v) != (0, 0) and abs(h) + abs(v) <= self.attackRange:
                     allTiles.append([self.loc[0] + h, self.loc[1] + v])
         attackableTiles = []
         for tile in allTiles:
@@ -451,7 +454,7 @@ class Warrior(Unit):
 
 class Archer(Unit):
     def __init__(self, owner, loc):
-        super().__init__(owner, loc, 100, 4, 75, 60)
+        super().__init__(owner, loc, 2, 4, 75, 60)
         self.attackRange = 3
     
     def __repr__(self):
@@ -565,6 +568,122 @@ class City(object):
         if self.justFinished:
             canvas.create_text(app.width / 2, 60, text = f'finished producing {self.owner.units[-1]}, spawned to the right of city')
 
+class Barbarian(object):
+    barbarians = []
+    
+    def __init__(self, loc):
+        self.loc = loc
+        self.moveRange = 4
+        self.actionTaken = False
+        self.hp = 200
+        self.dmg = 40
+    
+    def getMovableTiles(self, dimensions, map):
+        allTiles = []
+        for h in range(-self.moveRange, self.moveRange + 1):
+            for v in range(-self.moveRange, self.moveRange + 1):
+                if abs(h) + abs(v) <= self.moveRange:
+                    allTiles.append([self.loc[0] + h, self.loc[1] + v])
+        movableTiles = []
+        for tile in allTiles:
+            if not (tile[0] < 0 or tile[1] < 0 or tile[0] >= dimensions[0] or tile[1] >= dimensions[1] or map[tile[0]][tile[1]] != None):
+                movableTiles.append(tile)
+        return movableTiles
+    
+    def move(self, row, col):
+        self.loc = [row, col]
+    
+    def chooseTarget(self):
+        bestPlayer = None
+        highPlayerScore = 0
+        currentPlayerScore = 0
+        for player in Player.players:
+            currentPlayerScore = (player.food + player.gold + player.prod) + (len(player.units) * 5) + (len(player.buildings) * 20)
+            if currentPlayerScore > highPlayerScore:
+                highPlayerScore = currentPlayerScore
+                bestPlayer = player
+        closestLoc = None
+        smallestDist = 1000
+        currentDist = 0
+        for unit in bestPlayer.units:
+            currentDist = abs(unit.loc[0] - self.loc[0]) + abs(unit.loc[1] - self.loc[1])
+            if currentDist < smallestDist:
+                smallestDist = currentDist
+                closestLoc = unit.loc
+        for building in bestPlayer.buildings:
+            currentDist = abs(building.loc[0] - self.loc[0]) + abs(building.loc[1] - self.loc[1])
+            if currentDist < smallestDist:
+                smallestDist = currentDist
+                closestLoc = building.loc
+        return (closestLoc[0], closestLoc[1])
+    
+    def calcPath(self, dimensions, target):
+        distances = {}
+        prevs = {}
+        visited = set()
+        for row in range(dimensions[0]):
+            for col in range(dimensions[1]):
+                if [row, col] == self.loc:
+                    distances[(row, col)] = 0
+                else:
+                    distances[(row, col)] = 1000
+                prevs[(row, col)] = None
+        currentLoc = (self.loc[0], self.loc[1])
+        while(currentLoc != target):
+            dirs = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+            for dir in dirs:
+                if ((currentLoc[0] + dir[0]), (currentLoc[1] + dir[1])) in distances and ((currentLoc[0] + dir[0]), (currentLoc[1] + dir[1])) not in visited:
+                    distances[((currentLoc[0] + dir[0]), (currentLoc[1] + dir[1]))] = distances[currentLoc] + 1
+                    prevs[((currentLoc[0] + dir[0]), (currentLoc[1] + dir[1]))] = currentLoc
+            visited.add(currentLoc)
+            minDist = 1000
+            keys = list(distances.keys())
+            random.shuffle(keys)
+            for key in keys:
+                if (key != currentLoc) and (key not in visited) and (distances[key] < minDist):
+                    minDist = distances[key]
+                    currentLoc = key
+        res = []
+        backtrack = target
+        while(backtrack != ((self.loc[0], self.loc[1]))):
+            res.append(prevs[backtrack])
+            backtrack = prevs[backtrack]
+        return res
+    
+    def checkForAttack(self, dimensions, map):
+        dirs = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+        for dir in dirs:
+            check = (self.loc[0] + dir[0], self.loc[1] + dir[1])
+            if 0 <= check[0] < dimensions[0] and 0 <= check[1] < dimensions[1] and map[check[0]][check[1]] != None and not isinstance(map[check[0]][check[1]], Barbarian):
+                other = map[check[0]][check[1]]
+                self.hp -= 0.5 * other.dmg
+                other.hp -= self.dmg
+                other.checkHP()
+                return True
+        return False
+
+    def act(self, dimensions, map):
+        if self.checkForAttack(dimensions, map):
+            return
+        path = self.calcPath(dimensions, self.chooseTarget())
+        movable = self.getMovableTiles(dimensions, map)
+        print(path)
+        print(movable)
+        for loc in path:
+            if [loc[0], loc[1]] in movable:
+                print(True)
+                self.move(loc[0], loc[1])
+                return
+    
+    def checkHP(self):
+        if self.hp <= 0:
+            Barbarian.barbarians.remove(self)
+            return True
+        return False
+    
+    def draw(self, app, canvas):
+        x0, y0, x1, y1 = getCellBounds(app, self.loc[0], self.loc[1])
+        canvas.create_oval(x0, y0, x1, y1, fill = 'red')
 
 def appStarted(app):
     app.rows = 30
@@ -573,7 +692,7 @@ def appStarted(app):
     app.cellHeight = 30
     app.margin = [(app.width - (app.rows * app.cellWidth)) / 2, (app.height - (app.cols * app.cellHeight))]
     app.mouseLoc = None
-    app.players = [Player([app.rows, app.cols]), Player([app.rows, app.cols])]
+    app.players = [Player(app, [app.rows, app.cols]), Player(app, [app.rows, app.cols])]
     app.currentPlayer = app.players[0]
     app.globalMap = GlobalMap([app.rows, app.cols])
     app.turnCounter = 1
@@ -594,6 +713,8 @@ def mouseMoved(app, event):
     app.mouseLoc = [event.x, event.y]
 
 def mousePressed(app, event):
+    if app.gameOver:
+        return
     selected = False
     if app.currentPlayer.movingSelectedUnit:
         app.currentPlayer.selectedUnit.move(app, event.x, event.y)
@@ -618,26 +739,26 @@ def mousePressed(app, event):
     
 
 def keyPressed(app, event):
+    if app.gameOver:
+        return
     if event.key == 'r':
         appStarted(app)
     if event.key == '=':
         app.cellWidth += 5
         app.cellHeight += 5
-        # app.margin = [(app.width - ((app.rows * app.cellWidth) + app.margin[0])) / 2, (app.height - ((app.cols * app.cellHeight) + app.margin[1])) / 2]
     if event.key == '-':
         app.cellWidth = max(app.cellWidth - 5, 10)
         app.cellHeight = max(app.cellHeight - 5, 10)
-        # app.margin = [(app.width - ((app.rows * app.cellWidth) + app.margin[0])) / 2, (app.height - ((app.cols * app.cellHeight) + app.margin[1])) / 2]
     if event.key == '1':
-        if isinstance(app.currentPlayer.selectedBuilding, City):
+        if isinstance(app.currentPlayer.selectedBuilding, City) and app.currentPlayer.selectedBuilding.producingUnit == None:
             app.currentPlayer.selectedBuilding.producingUnit = Warrior(app.currentPlayer, [app.currentPlayer.selectedBuilding.loc[0], app.currentPlayer.selectedBuilding.loc[1] + 1])
             app.currentPlayer.selectedBuilding.actionTaken = True
     if event.key == '2':
-        if isinstance(app.currentPlayer.selectedBuilding, City):
+        if isinstance(app.currentPlayer.selectedBuilding, City) and app.currentPlayer.selectedBuilding.producingUnit == None:
             app.currentPlayer.selectedBuilding.producingUnit = Archer(app.currentPlayer, [app.currentPlayer.selectedBuilding.loc[0], app.currentPlayer.selectedBuilding.loc[1] + 1])
             app.currentPlayer.selectedBuilding.actionTaken = True
     if event.key == '3':
-        if isinstance(app.currentPlayer.selectedBuilding, City):
+        if isinstance(app.currentPlayer.selectedBuilding, City) and app.currentPlayer.selectedBuilding.producingUnit == None:
             app.currentPlayer.selectedBuilding.producingUnit = Settler(app.currentPlayer, [app.currentPlayer.selectedBuilding.loc[0], app.currentPlayer.selectedBuilding.loc[1] + 1])
             app.currentPlayer.selectedBuilding.actionTaken = True
     if event.key == 'm':
@@ -658,6 +779,10 @@ def keyPressed(app, event):
         app.currentPlayer.nextTurn(app)
         if app.players.index(app.currentPlayer) == len(app.players) - 1:
             app.turnCounter += 1
+            if app.turnCounter % 10 == 0:
+                Barbarian.barbarians.append(Barbarian([random.randrange(0, app.rows), random.randrange(0, app.cols)]))
+            for barbarian in Barbarian.barbarians:
+                barbarian.act([app.rows, app.cols], app.currentPlayer.map.map)
         checkForWin(app)
         if app.gameOver:
             return
