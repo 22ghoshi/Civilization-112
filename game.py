@@ -321,7 +321,8 @@ class Player(object):
             canvas.create_text(app.width / 2, 80, text = 'press h for help, or press t to end turn early')
         if self.selectedUnit != None:
             canvas.create_text(app.width / 2, 20, text = f'selected unit: {self.selectedUnit}, hp = {self.selectedUnit.hp}, dmg = {self.selectedUnit.dmg}')
-            self.selectedUnit.drawInstructions(app, canvas)
+            if self.selectedUnit.owner == self:
+                self.selectedUnit.drawInstructions(app, canvas)
         elif self.selectedBuilding != None:
             canvas.create_text(app.width / 2, 20, text = f'selected building: {self.selectedBuilding}, hp = {self.selectedBuilding.hp}, dmg = {self.selectedBuilding.dmg}')
             self.selectedBuilding.drawInstructions(app, canvas)
@@ -428,7 +429,7 @@ class Warrior(Unit):
     def attack(self, app, x, y):
         if (getCellClicked(app, x, y) in self.getAttackableTiles(self.owner.map.dimensions)):
             attackloc = getCellClicked(app, x, y)
-            if self.owner.map.map[attackloc[0]][attackloc[1]] != None:
+            if self.owner.map.map[attackloc[0]][attackloc[1]] != None and self.owner.map.map[attackloc[0]][attackloc[1]].owner != self.owner:
                 self.owner.map.map[attackloc[0]][attackloc[1]].hp -= self.dmg
                 self.hp -= int(0.2 * self.owner.map.map[attackloc[0]][attackloc[1]].dmg)
                 self.checkHP()
@@ -553,7 +554,7 @@ class City(object):
         return val
     
     def checkHP(self):
-        if self.hp <= 0 and self in self.owner.units:
+        if self.hp <= 0:
             self.owner.buildings.remove(self)
             return False
 
@@ -580,7 +581,7 @@ class City(object):
         else:
             canvas.create_text(app.width / 2, 40, text = f'producing {self.producingUnit}, needs {(self.getUnitProdValue(repr(self.producingUnit)))} total production to finish')
         if self.justFinished:
-            canvas.create_text(app.width / 2, 60, text = f'finished producing {self.owner.units[-1]}, spawned to the right of city')
+            canvas.create_text(app.width / 2, 55, text = f'finished producing {self.owner.units[-1]}, spawned to the right of city')
 
 class Barbarian(object):
     barbarians = []
@@ -631,7 +632,10 @@ class Barbarian(object):
                 closestLoc = building.loc
         return (closestLoc[0], closestLoc[1])
     
+    #CITATION: idea / pseudocode for Dijkstra's algorithm below taken from the Graphs/Game AI Presentation
     def calcPath(self, dimensions, target):
+        if target == None:
+            return
         distances = {}
         prevs = {}
         visited = set()
@@ -672,6 +676,7 @@ class Barbarian(object):
                 other = map[check[0]][check[1]]
                 self.hp -= 0.5 * other.dmg
                 other.hp -= self.dmg
+                self.checkHP()
                 other.checkHP()
                 return True
         return False
@@ -687,7 +692,7 @@ class Barbarian(object):
                 return
     
     def checkHP(self):
-        if self.hp <= 0 and self in Barbarian.barbarians:
+        if self.hp <= 0:
             Barbarian.barbarians.remove(self)
             return True
         return False
@@ -763,7 +768,11 @@ def mousePressed(app, event):
     
 
 def keyPressed(app, event):
+    if event.key == 'e':
+        app.gameOver = True
     if app.gameOver:
+        if event.key == 'r':
+            appStarted(app)
         return
     if app.helping:
         if event.key in ['h', 'Escape']:
@@ -771,8 +780,6 @@ def keyPressed(app, event):
         return
     if event.key == 'h':
         app.helping = True
-    if event.key == 'r':
-        appStarted(app)
     if event.key == '=':
         app.cellWidth += 5
         app.cellHeight += 5
@@ -824,9 +831,9 @@ def keyPressed(app, event):
             for barbarian in Barbarian.barbarians:
                 barbarian.act([app.rows, app.cols], app.currentPlayer.map.map)
         checkForWin(app)
+        app.currentPlayer = app.players[(app.players.index(app.currentPlayer) + 1) % len(app.players)]
         if app.gameOver:
             return
-        app.currentPlayer = app.players[(app.players.index(app.currentPlayer) + 1) % len(app.players)]
 
 def checkForWin(app):
     for player in app.players:
